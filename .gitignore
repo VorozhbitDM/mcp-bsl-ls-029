@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+
+# Виртуальное окружение
+venv/
+.venv/
+env/
+ENV/
+
+# Egg / dist
+*.egg-info/
+*.egg
+dist/
+build/
+
+# BSL JAR (бинарный файл ~110 МБ, превышает лимит Git 100 МБ)
+*.jar
+
+# Pytest / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.hypothesis/
+
+# IDE
+.vscode/
+.idea/
+*.suo
+*.user
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Логи
+*.log
+
+# Временные файлы BSL-анализа (создаются в tempdir, но на всякий случай)
+bsl_report_*/
+bsl-json.json

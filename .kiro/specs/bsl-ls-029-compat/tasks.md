@@ -1,0 +1,168 @@
+# Implementation Plan
+
+- [x] 1. Write bug condition exploration test
+  - **Property 1: Bug Condition** - Неверный синтаксис CLI 0.29.0
+  - **CRITICAL**: This test MUST FAIL on unfixed code — failure confirms the bug exists
+  - **DO NOT attempt to fix the test or the code when it fails**
+  - **NOTE**: This test encodes the expected behavior — it will validate the fix when it passes after implementation
+  - **GOAL**: Surface counterexamples that demonstrate the bug exists
+  - **Scoped PBT Approach**: Баг детерминирован — любой вызов `_build_analyze_command` или `_build_format_command` воспроизводит его; scope property на конкретные случаи для воспроизводимости
+  - Create `tests/test_bsl_runner.py` using `pytest` and `hypothesis`
+  - Use `D:\NewMCP\bsl_mcp\bsl-language-server-0.29.0-exec.jar` as `jar_path` in `BSLConfig`
+  - Use `D:\NewMCP\bsl_mcp\.bsl-language-server.json` as `config_file`
+  - Use `D:\NewMCP\bsl_mcp\ЗаказКлиента\` as `source_path`
+  - Test 1 — `_build_analyze_command` содержит `'--analyze'` (isBugCondition: commandContains(cmd, "--analyze")):
+    - Вызвать `runner._build_analyze_command(source_path, config_file, 512)`
+    - Проверить `'--analyze' in cmd` → на неисправленном коде PASS (баг подтверждён: старый флаг присутствует)
+    - Проверить `'analyze' in cmd and '--analyze' not in cmd` → на неисправленном коде FAIL
+  - Test 2 — `_build_analyze_command` содержит `'--srcDir'` и `'--reporter'`:
+    - Проверить `'--srcDir' in cmd` → на неисправленном коде PASS (баг подтверждён)
+    - Проверить `'-s' in cmd and '--srcDir' not in cmd` → FAIL
+  - Test 3 — `_build_analyze_command` не содержит флаг `-o`:
+    - Проверить `'-o' not in cmd` → на неисправленном коде PASS (баг подтверждён)
+  - Test 4 — `_build_format_command` содержит `'--format'` и `'--src'`:
+    - Вызвать `runner._build_format_command(source_path)`
+    - Проверить `'--format' in cmd` → на неисправленном коде PASS (баг подтверждён)
+    - Проверить `'format' in cmd and '--format' not in cmd` → FAIL
+  - Test 5 — inline-фильтр в `analyze` не фильтрует `WARNING:` строки:
+    - Проверить, что строка `'WARNING: A terminally deprecated method in java.lang.System has been called'`
+      НЕ фильтруется inline-кодом `not line.strip().startswith('Analyzing files')` → PASS (баг подтверждён)
+  - Run all tests on UNFIXED code
+  - **EXPECTED OUTCOME**: Tests 1–5 confirm bug conditions (assertions about buggy state pass; assertions about correct state fail)
+  - Document counterexamples found:
+    - `cmd` содержит `'--analyze'` вместо `'analyze'`
+    - `cmd` содержит `'--srcDir'` вместо `'-s'`
+    - `cmd` не содержит `'-o'`
+    - `cmd` содержит `'--format'` вместо `'format'`
+    - `WARNING:` строки не фильтруются inline-кодом
+  - Mark task complete when tests are written, run, and failures are documented
+  - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6_
+
+- [x] 2. Write preservation property tests (BEFORE implementing fix)
+  - **Property 2: Preservation** - Неизменность парсинга, фильтрации и окружения
+  - **IMPORTANT**: Follow observation-first methodology
+  - Observe behavior on UNFIXED code for non-buggy inputs (inputs where isBugCondition returns false)
+  - Non-buggy inputs: корректный JSON-payload диагностик, строки stderr без `WARNING:`, вызовы `_get_safe_environment`, `_count_processed_files`
+  - Add preservation tests to `tests/test_bsl_runner.py`
+  - **Observation 1** — `_parse_analyze_output` с корректным JSON:
+    - Observe: `_parse_analyze_output(json_payload, "")` возвращает список `BSLDiagnostic` с полями `file`, `line`, `column`, `severity`, `message`, `code`
+    - Write property-based test using `hypothesis`: генерировать случайные JSON-payload в формате `[{"path": str, "diagnostics": [...]}]`
+    - Assert: результат — список `BSLDiagnostic`; `line = range.start.line + 1`; `column = range.start.character + 1`
+    - Verify test PASSES on unfixed code
+  - **Observation 2** — `_is_noise_line` фильтрует `'Analyzing files'`:
+    - Observe: `_is_noise_line('Analyzing files 10/100')` → `True`
+    - Write property-based test: для всех строк с префиксами из `_IGNORE_PREFIXES` (`'Analyzing files'`, `'OpenJDK'`, `'Java HotSpot'`, `'WARNING:'`) `_is_noise_line` возвращает `True`
+    - Assert: пустые строки тоже возвращают `True`
+    - Verify test PASSES on unfixed code
+  - **Observation 3** — `_get_safe_environment` перенаправляет Windows-пути:
+    - Observe: `_get_safe_environment()` возвращает dict с `APPDATA`, `LOCALAPPDATA`, `TEMP`, `TMP`, `USERPROFILE`, `HOME` → `tempfile.gettempdir()`
+    - Write test: assert все шесть ключей присутствуют и равны `tempfile.gettempdir()`
+    - Verify test PASSES on unfixed code
+  - **Observation 4** — `_count_processed_files` считает `.bsl` и `.os` файлы:
+    - Observe: для директории `D:\NewMCP\bsl_mcp\ЗаказКлиента\` возвращает количество `.bsl` файлов
+    - Write test: assert результат > 0 для директории с BSL-файлами; assert == 1 для одиночного `.bsl` файла
+    - Verify test PASSES on unfixed code
+  - Run all preservation tests on UNFIXED code
+  - **EXPECTED OUTCOME**: All preservation tests PASS (confirms baseline behavior to preserve)
+  - Mark task complete when tests are written, run, and passing on unfixed code
+  - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.7, 3.8, 3.9_
+
+- [x] 3. Fix for BSL Language Server 0.29.0 CLI compatibility
+
+  - [x] 3.1 Add `import shutil` to `bsl_runner.py`
+    - Add `import shutil` to the imports block at the top of `src/mcp_bsl/bsl_runner.py`
+    - _Requirements: 2.3_
+
+  - [x] 3.2 Fix `_build_analyze_command` — исправить синтаксис CLI и управление output_dir
+    - Replace `'--analyze'` with positional subcommand `'analyze'`
+    - Move `-c config_path` BEFORE the subcommand (global flag)
+    - Replace `'--srcDir', source_str` with `'-s', source_str`
+    - Replace `'--reporter', 'json'` with `'-r', 'json'`
+    - Create `output_dir = tempfile.mkdtemp(prefix='bsl_report_')` inside the method
+    - Add `'-o', output_dir` to the command
+    - Change return type to return `(cmd, output_dir)` tuple
+    - Remove dead commented-out code
+    - Final command order: `java -Xmx{memory}m -Dfile.encoding=UTF-8 -jar bsl-ls.jar -c cfg.json analyze -s <srcDir> -r json -o <output_dir>`
+    - _Bug_Condition: isBugCondition(call) where commandContains(call, "--analyze") OR commandContains(call, "--srcDir") OR NOT commandContains(call, "-o")_
+    - _Expected_Behavior: cmd contains 'analyze' (not '--analyze'), '-s', '-r', '-o'; '-c' appears before 'analyze'_
+    - _Preservation: _parse_analyze_output, _get_safe_environment, _count_processed_files remain unchanged_
+    - _Requirements: 2.1, 2.2, 2.3_
+
+  - [x] 3.3 Fix `analyze` method — обновить вызов `_build_analyze_command` и чтение отчёта
+    - Unpack tuple: `cmd, output_dir = self._build_analyze_command(source_path, config_file, memory)`
+    - Remove `cwd=str(work_dir)` from `subprocess.run` call
+    - Remove `work_dir` computation if no longer used elsewhere
+    - Change `json_report_path = work_dir / "bsl-json.json"` to `json_report_path = Path(output_dir) / "bsl-json.json"`
+    - Change cleanup from `json_report_path.unlink()` to `shutil.rmtree(output_dir, ignore_errors=True)`
+    - _Bug_Condition: isBugCondition(call) where NOT commandContains(call, "-o") OR cwd=work_dir set_
+    - _Expected_Behavior: JSON report read from output_dir; entire temp dir cleaned up after reading_
+    - _Preservation: BSLResult(success=True) on returncode==0; BSLResult(success=False) on timeout; safe env passed to subprocess_
+    - _Requirements: 2.3, 2.6, 3.2, 3.3_
+
+  - [x] 3.4 Fix `analyze` method — унифицировать фильтрацию stderr через `_is_noise_line`
+    - Replace inline filter `not line.strip().startswith('Analyzing files')` with `not _is_noise_line(line)`
+    - Remove the `if line.strip() and` guard (already handled inside `_is_noise_line`)
+    - Ensure `_IGNORE_PREFIXES` already contains `'WARNING:'` (it does — verify, do not change)
+    - _Bug_Condition: isBugCondition(call) where stderrContains("WARNING:") AND NOT isFiltered("WARNING:")_
+    - _Expected_Behavior: _is_noise_line filters all prefixes in _IGNORE_PREFIXES including 'WARNING:'_
+    - _Preservation: 'Analyzing files' lines still filtered; BSLResult(success=False) only on real errors_
+    - _Requirements: 2.5, 3.4_
+
+  - [x] 3.5 Fix `_build_format_command` — исправить синтаксис CLI
+    - Replace `'--format'` with positional subcommand `'format'`
+    - Replace `'--src'` with `'-s'`
+    - Final command: `java -Dfile.encoding=UTF-8 -jar bsl-ls.jar format -s <path>`
+    - _Bug_Condition: isBugCondition(call) where commandContains(call, "--format") OR commandContains(call, "--src")_
+    - _Expected_Behavior: cmd contains 'format' (not '--format'), '-s' (not '--src')_
+    - _Preservation: BSLResult(success=True) on returncode==0; files_processed count unchanged_
+    - _Requirements: 2.4, 3.7_
+
+  - [x] 3.6 Verify bug condition exploration test now passes
+    - **Property 1: Expected Behavior** - Корректный синтаксис CLI 0.29.0
+    - **IMPORTANT**: Re-run the SAME tests from task 1 — do NOT write new tests
+    - The tests from task 1 encode the expected behavior
+    - When these tests pass, it confirms the expected behavior is satisfied
+    - Run bug condition exploration tests from step 1 on FIXED code
+    - **EXPECTED OUTCOME**: All tests PASS (confirms bug is fixed):
+      - `'analyze' in cmd and '--analyze' not in cmd` → PASS
+      - `'-s' in cmd and '--srcDir' not in cmd` → PASS
+      - `'-o' in cmd` → PASS
+      - `'format' in cmd and '--format' not in cmd` → PASS
+      - `WARNING:` строки фильтруются через `_is_noise_line` → PASS
+    - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6_
+
+  - [x] 3.7 Verify preservation tests still pass
+    - **Property 2: Preservation** - Неизменность парсинга, фильтрации и окружения
+    - **IMPORTANT**: Re-run the SAME tests from task 2 — do NOT write new tests
+    - Run all preservation property tests from step 2 on FIXED code
+    - **EXPECTED OUTCOME**: All tests PASS (confirms no regressions):
+      - `_parse_analyze_output` возвращает корректные `BSLDiagnostic` объекты
+      - `_is_noise_line` фильтрует все префиксы из `_IGNORE_PREFIXES`
+      - `_get_safe_environment` перенаправляет все шесть Windows-переменных
+      - `_count_processed_files` корректно считает `.bsl`/`.os` файлы
+    - Confirm all tests still pass after fix (no regressions)
+
+- [x] 4. Integration test — запустить реальный JAR 0.29.0
+  - Run real JAR `D:\NewMCP\bsl_mcp\bsl-language-server-0.29.0-exec.jar` against test directory
+  - Use Python interpreter `D:\NewMCP\bsl_mcp\venv\Scripts\python.exe`
+  - Add integration tests to `tests/test_bsl_runner.py` (mark with `@pytest.mark.integration`)
+  - Test 1 — `bsl_analyze` на директории `D:\NewMCP\bsl_mcp\ЗаказКлиента\`:
+    - Create `BSLRunner` with real JAR path and config `D:\NewMCP\bsl_mcp\.bsl-language-server.json`
+    - Call `runner.analyze(r'D:\NewMCP\bsl_mcp\ЗаказКлиента\')`
+    - Assert `result.success == True`
+    - Assert `result.files_processed > 0`
+    - Assert temporary output directory is deleted after analysis
+  - Test 2 — `bsl_format` на одном BSL-файле:
+    - Call `runner.format(r'D:\NewMCP\bsl_mcp\ЗаказКлиента\Ext\ObjectModule.bsl')`
+    - Assert `result.success == True`
+  - Test 3 — временная директория удаляется:
+    - After `analyze` completes, assert the `output_dir` path no longer exists on disk
+  - Run integration tests manually: `D:\NewMCP\bsl_mcp\venv\Scripts\python.exe -m pytest tests/test_bsl_runner.py -m integration -v`
+  - _Requirements: 2.1, 2.2, 2.3, 2.4, 3.1, 3.2, 3.3_
+
+- [x] 5. Checkpoint — Ensure all tests pass
+  - Run full test suite: `D:\NewMCP\bsl_mcp\venv\Scripts\python.exe -m pytest tests/test_bsl_runner.py -v`
+  - Ensure all unit and property-based tests pass
+  - Ensure integration tests pass (requires JAR and BSL files available)
+  - Confirm no regressions in preservation tests
+  - Ask the user if any questions arise

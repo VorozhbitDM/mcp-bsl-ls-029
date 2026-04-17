@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "bsl-mcp": {
+      "command": "D:\\NewMCP\\mcp-bsl-ls\\venv\\Scripts\\python.exe"
+      "args": [
+        "-m",
+        "mcp_bsl.server"
+      ],
+      "env": {
+        "BSL_JAR": "D:\\NewMCP\\mcp-bsl-ls\\bsl-language-server-0.29.0-exec.jar",
+        "BSL_MEMORY_MB": "4096",
+        "BSL_CONFIG": "D:\\NewMCP\\mcp-bsl-ls\\.bsl-language-server.json",
+        "BSL_LOG_LEVEL": "ERROR"
+      },
+      "debug": false,
+      "disabledTools": []
+    }
+  }
+}

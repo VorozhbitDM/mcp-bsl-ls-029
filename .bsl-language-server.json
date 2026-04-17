@@ -1,0 +1,15 @@
+{
+  "$schema": "https://1c-syntax.github.io/bsl-language-server/configuration/schema.json",
+  "language": "RU",
+  "diagnostics": {
+    "computeTrigger": "onSave",
+    "parameters": {
+      "SillyAssignment": {"severity": "warning"},
+      "UsingHardcodeSecretInformation": {"severity": "error"}
+    }
+  },
+  "formatter": {
+    "indentSize": 2,
+    "useTab": false
+  }
+}
