@@ -42,3 +42,5 @@ Thumbs.db
 # Временные файлы BSL-анализа (создаются в tempdir, но на всякий случай)
 bsl_report_*/
 bsl-json.json
+
+.kiro/
