@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "bsl-mcp": {
-      "command": "D:\\NewMCP\\mcp-bsl-ls-029\\venv\\Scripts\\python.exe"
+      "command": "D:\\NewMCP\\mcp-bsl-ls-029\\venv\\Scripts\\python.exe",
       "args": [
         "-m",
         "mcp_bsl.server"
