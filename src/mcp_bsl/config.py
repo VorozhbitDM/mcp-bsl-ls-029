@@ -52,7 +52,7 @@ def get_config() -> BSLConfig:
     """Get BSL configuration from environment variables."""
     jar_path = os.getenv('BSL_JAR')
     if not jar_path:
-        jar_path = r'D:\NewMCP\mcp-bsl-ls\bsl-language-server-0.29.0-exec.jar'
+        jar_path = r'D:\NewMCP\mcp-bsl-ls-029\bsl-language-server-0.29.0-exec.jar'
         #raise ValueError(
         #    "BSL_JAR environment variable is required. "
         #    "Set it to the path of bsl-language-server JAR file."
