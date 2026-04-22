@@ -52,7 +52,7 @@ def get_config() -> BSLConfig:
     """Get BSL configuration from environment variables."""
     jar_path = os.getenv('BSL_JAR')
     if not jar_path:
-        jar_path = r'C:\mcp\mcp-bsl-ls-029\bsl-language-server-0.29.0-exec.jar'
+        jar_path = r'D:\NewMCP\mcp-bsl-ls-029\bsl-language-server-0.29.0-exec.jar'
         #raise ValueError(
         #    "BSL_JAR environment variable is required. "
         #    "Set it to the path of bsl-language-server JAR file."
@@ -68,6 +68,34 @@ def get_config() -> BSLConfig:
     )
 
 
+def _resolve_relative_source_path(path: pathlib.Path) -> pathlib.Path:
+    """Resolve relative source path against likely project roots.
+
+    Cursor may start MCP servers from a user-home working directory, so plain
+    cwd-based resolution can break for relative paths. Keep cwd as the first
+    candidate, then fall back to roots derived from MCP env configuration.
+    """
+    candidates = [pathlib.Path.cwd() / path]
+
+    project_root = os.getenv("BSL_PROJECT_ROOT")
+    if project_root:
+        candidates.append(pathlib.Path(project_root) / path)
+
+    bsl_config = os.getenv("BSL_CONFIG")
+    if bsl_config:
+        candidates.append(pathlib.Path(bsl_config).parent / path)
+
+    bsl_jar = os.getenv("BSL_JAR")
+    if bsl_jar:
+        candidates.append(pathlib.Path(bsl_jar).parent / path)
+
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+
+    return candidates[0]
+
+
 def validate_source_path(source_path: str) -> pathlib.Path:
     """Validate source path (file or directory).
     
@@ -78,8 +106,7 @@ def validate_source_path(source_path: str) -> pathlib.Path:
     
     # Try to resolve the path
     if not path.is_absolute():
-        # Try relative to current working directory
-        path = pathlib.Path.cwd() / path
+        path = _resolve_relative_source_path(path)
     
     if not path.exists():
         # Provide helpful error message

@@ -97,6 +97,7 @@ class BSLRunner:
             memory = memory_mb or self.config.default_memory_mb
             
             self.logger.debug(f"Analysis parameters - source: {source_path}, config: {config_file}, memory: {memory}MB")
+            run_cwd = source_path if source_path.is_dir() else source_path.parent
             
             # Build command — returns (cmd, output_dir) tuple
             cmd, output_dir = self._build_analyze_command(source_path, config_file, memory)
@@ -114,6 +115,7 @@ class BSLRunner:
                 encoding='utf-8',
                 timeout=300,  # 5 minutes timeout
                 env=env,
+                cwd=str(run_cwd),
             )
             
             self.logger.info(f"Analysis command completed with return code: {result.returncode}")
@@ -235,6 +237,7 @@ class BSLRunner:
             # Build command
             cmd = self._build_format_command(source_path)
             self.logger.debug(f"Built format command: {' '.join(cmd)}")
+            run_cwd = source_path if source_path.is_dir() else source_path.parent
             
             # Execute command with safe environment
             self.logger.info("Executing BSL formatting command")
@@ -245,7 +248,8 @@ class BSLRunner:
                 text=True,
                 encoding='utf-8',
                 timeout=120,  # 2 minutes timeout
-                env=env
+                env=env,
+                cwd=str(run_cwd)
             )
             
             self.logger.info(f"Formatting command completed with return code: {result.returncode}")
@@ -305,8 +309,11 @@ class BSLRunner:
         config_path = config_file.resolve().as_posix()
         source_str = str(source_path.resolve())
 
-        # Create a dedicated temp directory for this run's JSON report
-        output_dir = tempfile.mkdtemp(prefix='bsl_report_')
+        # Keep report directory on the same drive as source files.
+        # BSL LS uses path relativization internally; cross-drive temp paths
+        # (e.g. source on D:, temp on C:) can crash on Windows.
+        output_parent = source_path if source_path.is_dir() else source_path.parent
+        output_dir = tempfile.mkdtemp(prefix='bsl_report_', dir=str(output_parent))
 
         # BSL LS 0.29.0 CLI syntax:
         #   java [jvm-flags] -jar bsl-ls.jar -c <cfg> analyze -s <src> -r json -o <outDir>
